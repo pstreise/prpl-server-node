@@ -53,7 +53,7 @@ suite('prpl server', function() {
       (path: string, ua?: string, headers?: {[key: string]: string}): Promise<{
         code: number | undefined,
         data: string,
-        headers: {[key: string]: string}
+        headers: http.IncomingHttpHeaders
       }> => {
         return new Promise((resolve) => {
           const getHeaders = Object.assign({'user-agent': ua || ''}, headers);
@@ -212,7 +212,7 @@ suite('prpl server', function() {
       test('respects etag request header', async () => {
         const {headers} = await get('/es2015/fragment.html', chrome);
         const {code, data} = await get('/es2015/fragment.html', chrome, {
-          'If-None-Match': headers['etag'],
+          'If-None-Match': headers['etag'] as string,
         });
         assert.equal(code, 304);
         assert.equal(data, '');
