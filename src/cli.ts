@@ -48,6 +48,21 @@ const argDefs = [
     description: 'Listen on this port; 0 for random (default 8080).'
   },
   {
+    name: 'http2',
+    type: Boolean,
+    description: 'Enable HTTP2 support. Requires Node 8.8 or higher.',
+  },
+  {
+    name: 'tls-key',
+    type: String,
+    description: 'Path to a TLS certificate key. TODO',
+  },
+  {
+    name: 'tls-cert',
+    type: String,
+    description: 'Path to a TLS certificate file. TODO',
+  },
+  {
     name: 'root',
     type: String,
     defaultValue: '.',
@@ -165,7 +180,32 @@ export function run(argv: string[]) {
 
   app.use(prpl.makeHandler(args.root, config));
 
-  const server = app.listen(args.port, args.host, () => {
+  let server: any;  // TODO type
+  if (args.http2) {
+    let http2;
+    try {
+      http2 = require('http2');
+    } catch {
+      throw new Error('HTTP/2 support not available. Node >=8.8 required.');
+    }
+    server = http2.createSecureServer(
+        {
+          cert: fs.readFileSync(args['tls-cert']),
+          key: fs.readFileSync(args['tls-key']),
+          allowHTTP1: true,
+        },
+        (_req: any, res: any) => {
+          res.setHeader('Content-Type', 'text/html');
+          res.setHeader('X-Foo', 'bar');
+          res.writeHead(200, {'Content-Type': 'text/plain'});
+          res.end('ok');
+        });
+  } else {
+    const http = require('http');
+    server = http.createServer(app)
+  }
+
+  server.listen(args.port, args.host, () => {
     const addr = server.address();
     let urlHost = addr.address;
     if (addr.family === 'IPv6') {
