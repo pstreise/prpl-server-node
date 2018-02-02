@@ -78,7 +78,8 @@ const isServiceWorker = /service-worker.js$/;
 export function makeHandler(root?: string, config?: Config): (
     request: http.IncomingMessage,
     response: http.ServerResponse,
-    next?: express.NextFunction) => void {
+    next?: express.NextFunction,
+    pushAssets?: Array) => void {
   const absRoot = path.resolve(root || '.');
   console.info(`Serving files from "${absRoot}".`);
 
@@ -91,7 +92,7 @@ export function makeHandler(root?: string, config?: Config): (
       true;
   const forwardErrors = config && config.forwardErrors;
 
-  return async function prplHandler(request, response, next) {
+  return async function prplHandler(request, response, next, pushAssets) {
     const handleError = (err: httpErrors.HttpError) => {
       if (forwardErrors && next) {
         next(err);
@@ -165,15 +166,23 @@ self.addEventListener('activate', () => self.registration.unregister());`);
     }
 
     if (build && build.pushManifest) {
-      const linkHeaders = build.pushManifest.linkHeaders(urlPath);
-      if (urlPath !== fileToSend) {
-        // Also check the filename against the push manifest. In the case of
-        // the entrypoint, these will be different (e.g. "/my/app/route" vs
-        // "/es2015/index.html"), and we want to support configuring pushes in
-        // terms of both.
-        linkHeaders.push(...build.pushManifest.linkHeaders(fileToSend));
-      }
-      response.setHeader('Link', linkHeaders);
+        var linkHeaders = new Array;
+        if(typeof pushAssets  === 'object' && pushAssets.length > 0) {
+            pushAssets.forEach(function(assetName: string) {
+                linkHeaders.push(...build.pushManifest.linkHeaders('/' + build.buildDir + '/' + assetName));
+            });
+        } else {
+            linkHeaders = build.pushManifest.linkHeaders(urlPath);
+            if (urlPath !== fileToSend) {
+                // Also check the filename against the push manifest. In the case of
+                // the entrypoint, these will be different (e.g. "/my/app/route" vs
+                // "/es2015/index.html"), and we want to support configuring pushes in
+                // terms of both.
+                linkHeaders.push(...build.pushManifest.linkHeaders(fileToSend));
+            }
+        }
+
+        response.setHeader('Link', linkHeaders);
     }
 
     const sendOpts = {
@@ -217,6 +226,7 @@ function addTrailingPathSep(p: string): string {
 
 class Build {
   public pushManifest?: push.PushManifest;
+  public buildDir?: string;
 
   constructor(
       private configOrder: number,
@@ -224,6 +234,7 @@ class Build {
       public entrypoint: string,
       buildDir: string,
       serverRoot: string) {
+      this.buildDir = path.relative(serverRoot, buildDir);
     // TODO Push manifest location should be configurable.
     const pushManifestPath = path.join(buildDir, 'push-manifest.json');
     const relPath = path.relative(serverRoot, pushManifestPath);
